@@ -39,6 +39,41 @@ body {
 }
 .temp-control label { display: block; margin-bottom: 6px; color: var(--muted); }
 .temp-control input[type="range"] { width: min(60vw, 520px); }
+.temp-control input[type="range"] {
+  appearance: none;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--range-bg, linear-gradient(90deg, #1db954 0%, rgba(255,255,255,0.12) 0%));
+  outline: none;
+}
+.temp-control input[type="range"]::-webkit-slider-runnable-track {
+  appearance: none;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--range-bg, linear-gradient(90deg, #1db954 0%, rgba(255,255,255,0.12) 0%));
+}
+.temp-control input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--range-color, #1db954);
+  box-shadow: 0 0 10px 2px var(--range-glow, transparent);
+  border: 1px solid rgba(255,255,255,0.3);
+  margin-top: -4px; /* center the thumb */
+}
+/* Firefox */
+.temp-control input[type="range"]::-moz-range-track {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--range-bg, linear-gradient(90deg, #1db954 0%, rgba(255,255,255,0.12) 0%));
+}
+.temp-control input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--range-color, #1db954);
+  border: 1px solid rgba(255,255,255,0.3);
+  box-shadow: 0 0 10px 2px var(--range-glow, transparent);
+}
 .kelvin { margin-left: 6px; color: var(--muted); }
 
 .phase-indicator {
@@ -117,6 +152,13 @@ body {
   font-size: 0.95rem;
   display: flex;
   gap: 10px;
+}
+.metrics output {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--accent-color, var(--text));
 }
 
 /* Simple animation hints */
