@@ -110,6 +110,15 @@ body {
 
 .app-footer { padding: 14px 20px 28px; color: var(--muted); }
 
+.metrics {
+  margin: 10px auto 0;
+  width: min(960px, 95vw);
+  color: var(--muted);
+  font-size: 0.95rem;
+  display: flex;
+  gap: 10px;
+}
+
 /* Simple animation hints */
 .sparkle { position: absolute; pointer-events: none; mix-blend-mode: screen; }
 .sparkle::before {

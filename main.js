@@ -22,6 +22,8 @@
   const boilBtn = document.getElementById('boilBtn')
   const condenseBtn = document.getElementById('condenseBtn')
   const toggleBondsEl = document.getElementById('toggleBonds')
+  const avgBondDurationEl = document.getElementById('avgBondDuration')
+  const activeBondsEl = document.getElementById('activeBonds')
 
   // Logical sim space matches canvas intrinsic size; CSS scales it responsively
   let W = canvas.width
@@ -45,13 +47,13 @@
   const G_TERM_BASE = 220 // base terminal speed
   const FLOOR_FRICTION_BASE = 4.0 // base per-second friction when on floor
   // Solid-state vibration tweak
-  const VIB_AMP = 25 // px/s random vibration amplitude in solid/freezing
-  const VIB_ANG = 0.6 // rad/s small angular jitter in solid/freezing
+  const VIB_AMP = 40 // px/s random vibration amplitude in solid/freezing
+  const VIB_ANG = 1.0 // rad/s small angular jitter in solid/freezing
 
   // Lattice packing (activated in solid): hexagonal grid
   let lattice = [] // array of anchor points {x,y}
   const LATTICE_SPACING_LIQUID = 34
-  const LATTICE_SPACING_SOLID = 62 // slightly larger spacing for ice-like lower density
+  const LATTICE_SPACING_SOLID = 56 // slightly larger spacing for ice-like lower density
   const LATTICE_SPRING = 0.8 // spring strength toward anchor when solid
   const LATTICE_DAMP = 0.85
   const SOLID_THRESHOLD = 0 // deg C
@@ -81,6 +83,11 @@
 
   // Molecule container
   const molecules = []
+  // Bond tracking: map of key "i-j" to {start: seconds}
+  const bonds = new Map()
+  // Rolling average of bond durations (seconds)
+  let bondDurations = []
+  const MAX_BOND_SAMPLES = 1000
 
   function rand(min, max) { return Math.random() * (max - min) + min }
 
@@ -211,12 +218,30 @@
         }
 
         // Mid-range attraction within IMF cutoff, scaled by coolness
-        if (d < IMF_CUTOFF) {
+        const inBond = d < IMF_CUTOFF
+        if (inBond) {
           const strength = IMF_ATTRACT_STRENGTH * coolFactor * (1 - d / IMF_CUTOFF)
           // convert to velocity-like change per frame using dt and base scale
           const dv = strength * dt * 60 // approximate to frame-rate for feel
           a.vx += nx * dv; a.vy += ny * dv
           b.vx -= nx * dv; b.vy -= ny * dv
+
+          // Track bond start
+          const key = `${i}-${j}`
+          if (!bonds.has(key)) {
+            bonds.set(key, { start: performance.now() / 1000 })
+          }
+        } else {
+          // If a bond existed and just broke, record duration
+          const key = `${i}-${j}`
+          const info = bonds.get(key)
+          if (info) {
+            const now = performance.now() / 1000
+            const dur = Math.max(0, now - info.start)
+            bonds.delete(key)
+            bondDurations.push(dur)
+            if (bondDurations.length > MAX_BOND_SAMPLES) bondDurations.shift()
+          }
         }
       }
     }
@@ -291,6 +316,13 @@
       freezeBoost = freezeTimerMs / 2500
     } else {
       freezeBoost = 0
+    }
+    // Update metrics UI
+    if (avgBondDurationEl && activeBondsEl) {
+      const active = bonds.size
+      const avg = bondDurations.length ? (bondDurations.reduce((a,b)=>a+b,0) / bondDurations.length) : 0
+      activeBondsEl.textContent = String(active)
+      avgBondDurationEl.textContent = avg.toFixed(2)
     }
   }
 
