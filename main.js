@@ -24,6 +24,7 @@
   const toggleBondsEl = document.getElementById('toggleBonds')
   const avgBondDurationEl = document.getElementById('avgBondDuration')
   const activeBondsEl = document.getElementById('activeBonds')
+  const metricsEl = document.querySelector('.metrics')
 
   // Logical sim space matches canvas intrinsic size; CSS scales it responsively
   let W = canvas.width
@@ -74,6 +75,48 @@
     return base * hotBoost
   }
 
+  // --- Temperature color mapping for slider + metrics accent ---
+  function clamp01(x) { return Math.max(0, Math.min(1, x)) }
+  function lerp(a, b, t) { return a + (b - a) * t }
+  function hsl(h, s, l) { return `hsl(${h}, ${s}%, ${l}%)` }
+  function tempToColor(tempC) {
+    const minC = -273.15
+    const stops = [
+      { t: minC, h: 260, s: 85, l: 60, glow: 'rgba(166,75,244,0.85)' }, // 0 K -> purple glow
+      { t: 0,    h: 200, s: 90, l: 62, glow: 'rgba(120,180,255,0.4)' },  // <0 °C light blue
+      { t: 25,   h: 140, s: 75, l: 45, glow: 'rgba(80,230,120,0.35)' },  // ~25 °C green
+      { t: 100,  h: 30,  s: 90, l: 50, glow: 'rgba(255,170,70,0.45)' },  // ~100 °C orange
+      { t: 500,  h: 0,   s: 95, l: 55, glow: 'rgba(255,60,60,0.6)' }     // 500 °C red
+    ]
+    if (tempC <= stops[0].t) return { color: hsl(stops[0].h, stops[0].s, stops[0].l), glow: stops[0].glow }
+    for (let i = 0; i < stops.length - 1; i++) {
+      const a = stops[i], b = stops[i + 1]
+      if (tempC <= b.t) {
+        const tt = clamp01((tempC - a.t) / (b.t - a.t))
+        const h = lerp(a.h, b.h, tt)
+        const s = lerp(a.s, b.s, tt)
+        const l = lerp(a.l, b.l, tt)
+        const glow = tt < 0.05 ? a.glow : (tt > 0.95 ? b.glow : 'rgba(255,255,255,0.25)')
+        return { color: hsl(h, s, l), glow }
+      }
+    }
+    const last = stops[stops.length - 1]
+    return { color: hsl(last.h, last.s, last.l), glow: last.glow }
+  }
+
+  function updateTempSliderAppearance(tempC) {
+    if (!tempRange) return
+    const min = parseFloat(tempRange.min || '-273.15')
+    const max = parseFloat(tempRange.max || '500')
+    const pct = clamp01((tempC - min) / (max - min)) * 100
+    const { color, glow } = tempToColor(tempC)
+    const bg = `linear-gradient(90deg, ${color} 0%, ${color} ${pct}%, rgba(255,255,255,0.12) ${pct}%, rgba(255,255,255,0.12) 100%)`
+    tempRange.style.setProperty('--range-color', color)
+    tempRange.style.setProperty('--range-glow', glow)
+    tempRange.style.setProperty('--range-bg', bg)
+    if (metricsEl) metricsEl.style.setProperty('--accent-color', color)
+  }
+
   // Phase estimation (1 atm):
   function getPhase(c) {
     if (c <= 0) return 'Solid (Ice)'
@@ -88,6 +131,9 @@
   // Rolling average of bond durations (seconds)
   let bondDurations = []
   const MAX_BOND_SAMPLES = 1000
+  // Track sim time and a short history of active bonds for 3s average in liquid/gas
+  let simTime = 0
+  const activeBondHistory = [] // {t, count}
 
   function rand(min, max) { return Math.random() * (max - min) + min }
 
@@ -148,6 +194,7 @@
   }
 
   function update(dt, tempC) {
+    simTime += dt
     const mult = speedMultiplier(tempC)
     // Movement damping: reduced during freeze and in solid
   const solidMotionDamp = tempC <= SOLID_THRESHOLD ? 0.15 : 1
@@ -319,10 +366,25 @@
     }
     // Update metrics UI
     if (avgBondDurationEl && activeBondsEl) {
-      const active = bonds.size
       const avg = bondDurations.length ? (bondDurations.reduce((a,b)=>a+b,0) / bondDurations.length) : 0
-      activeBondsEl.textContent = String(active)
       avgBondDurationEl.textContent = avg.toFixed(2)
+
+      const phaseText = getPhase(tempC)
+      const isLiquidOrGas = /Liquid|Gas/.test(phaseText)
+      let activeDisplay = bonds.size
+      if (isLiquidOrGas) {
+        // keep only last ~3 seconds of samples
+        activeBondHistory.push({ t: simTime, count: bonds.size })
+        const cutoff = simTime - 3
+        while (activeBondHistory.length && activeBondHistory[0].t < cutoff) activeBondHistory.shift()
+        if (activeBondHistory.length) {
+          const sum = activeBondHistory.reduce((acc, s) => acc + s.count, 0)
+          activeDisplay = Math.round(sum / activeBondHistory.length)
+        }
+      } else {
+        activeBondHistory.length = 0
+      }
+      activeBondsEl.textContent = String(activeDisplay)
     }
   }
 
@@ -375,6 +437,8 @@
     phaseIndicator.dataset.phase = phase
     phaseOverlay.textContent = phase
     phaseOverlay.hidden = false
+    // Update slider + metrics color theme
+    updateTempSliderAppearance(cNum)
 
     // Rebuild lattice and (re)assign anchors when entering solid; clear when leaving
     if (cNum <= SOLID_THRESHOLD || freezeBoost > 0) {
