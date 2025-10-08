@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Intermolecular Forces — Water Simulation</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Water Molecules & Intermolecular Forces</h1>
+      <p class="subtitle">Canvas simulation with green dotted SVG lines for attractions</p>
+    </header>
+
+    <section class="controls">
+      <div class="temp-control">
+        <label for="tempRange">Temperature (°C):
+          <output id="tempCLabel">0</output>
+          <span class="kelvin">(<span id="tempKLabel">273.15</span> K)</span>
+        </label>
+  <input id="tempRange" type="range" min="-273.15" max="500" value="25" step="0.1" />
+      </div>
+
+      <div class="phase-indicator" id="phaseIndicator" aria-live="polite">Liquid</div>
+
+      <div class="phase-buttons">
+        <button id="freezeBtn" type="button">Freeze ❄️</button>
+        <button id="meltBtn" type="button">Melt 💧</button>
+        <button id="boilBtn" type="button">Boil ♨️</button>
+        <button id="condenseBtn" type="button">Condense ☁️</button>
+        <label class="toggle-bonds"><input id="toggleBonds" type="checkbox" checked /> Show bonds</label>
+      </div>
+    </section>
+
+    <section class="legend">
+      <strong>Key:</strong>
+      <span class="key-item">
+        <span class="ball ball-o"></span> Oxygen (O)
+      </span>
+      <span class="key-item">
+        <span class="ball ball-h"></span> Hydrogen (H)
+      </span>
+      <span class="key-item">
+        <svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true">
+          <line x1="0" y1="7" x2="28" y2="7" stroke="#1db954" stroke-width="2" stroke-dasharray="4 4" />
+        </svg>
+        Intermolecular attraction
+      </span>
+    </section>
+
+    <main class="sim-wrap">
+      <div class="sim-container" id="simContainer">
+        <canvas id="simCanvas" width="960" height="560"></canvas>
+        <svg id="imfOverlay" class="overlay" width="960" height="560" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="phaseLabel" class="phase-overlay" hidden></div>
+      </div>
+    </main>
+
+    <footer class="app-footer">
+      <small>Tip: Drag the temperature slider from absolute zero (-273 °C) up to 500 °C. Phase is estimated at 1 atm (Ice ≤ 0 °C, Liquid 0–100 °C, Gas ≥ 100 °C).</small>
+    </footer>
+
+    <script src="main.js"></script>
+  </body>
+  </html>
