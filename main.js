@@ -45,7 +45,7 @@
   const G_TERM_BASE = 220 // base terminal speed
   const FLOOR_FRICTION_BASE = 4.0 // base per-second friction when on floor
   // Solid-state vibration tweak
-  const VIB_AMP = 18 // px/s random vibration amplitude in solid/freezing
+  const VIB_AMP = 25 // px/s random vibration amplitude in solid/freezing
   const VIB_ANG = 0.6 // rad/s small angular jitter in solid/freezing
 
   // Lattice packing (activated in solid): hexagonal grid
