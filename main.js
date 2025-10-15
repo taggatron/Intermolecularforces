@@ -577,6 +577,261 @@
   // Kinetic energy mini chart
   // (KE mini chart removed)
 
+  // --- Heat vs Temperature model and charting ---
+  // We'll model 1 mole of water for simplicity. Units: kJ per mole (kJ/mol) for heat.
+  // Specific heats (approx):
+  // Ice (solid): Cs = 2.09 J/gK -> 36.7 kJ/kmolK -> for 1 mol (18 g): 2.09 * 18 / 1000 = 0.03762 kJ/K
+  // Liquid: Cl = 4.18 J/gK -> 75.24 kJ/kmolK -> per mol: 4.18 * 18 / 1000 = 0.07524 kJ/K
+  // Gas: Cg ~ 1.9 J/gK -> per mol: 1.9 * 18 / 1000 = 0.0342 kJ/K
+  const MOLAR_MASS = 18.01528 // g/mol
+  const Cs = 2.09 * MOLAR_MASS / 1000 // kJ / (mol K)
+  const Cl = 4.18 * MOLAR_MASS / 1000
+  const Cg = 1.9 * MOLAR_MASS / 1000
+  const Lf = 6.01 * 18.01528 / 1000 // enthalpy of fusion ~6.01 kJ/mol? Actually 6.01 kJ/mol directly; keep per mol
+  // Note: The values above are approximate and intended for pedagogical simulation
+  // Use typical latent heats (kJ/mol): fusion ~6.01, vaporization ~40.65
+  const LATENT_FUSION = 6.01 // kJ/mol
+  const LATENT_VAP = 40.65 // kJ/mol
+
+  // Temperature breakpoints (deg C)
+  const T_melt = 0
+  const T_boil = 100
+
+  // Compute Q(T): heat added (kJ per mol) to take 1 mol from a reference base (e.g., -50 C) up to T
+  // We'll choose reference T0 = -50 C where Q=0 for plotting convenience
+  const T0 = -273.15
+  function Q_of_T(T) {
+    // integrate piecewise from T0 to T
+    let Q = 0
+    function heatAcross(a, b, C) { return C * (b - a) }
+    // helper to accumulate from low to high
+    const low = Math.min(T0, T)
+    const high = Math.max(T0, T)
+    // We'll step through intervals: [-50..0] solid, [0..100] liquid (with plateau for fusion), [100..T] gas
+    if (T >= T0 && T <= T_melt) {
+      // entirely in solid
+      return Cs * (T - T0)
+    }
+    if (T > T_melt && T <= T_boil) {
+      // heat solid from T0 to melt, add latent fusion, then liquid to T
+      Q = Cs * (T_melt - T0) + LATENT_FUSION + Cl * (T - T_melt)
+      return Q
+    }
+    if (T > T_boil) {
+      Q = Cs * (T_melt - T0) + LATENT_FUSION + Cl * (T_boil - T_melt) + LATENT_VAP + Cg * (T - T_boil)
+      return Q
+    }
+    // If T < T0 (rare), allow negative Q
+    if (T < T0) {
+      return Cs * (T - T0)
+    }
+    return Q
+  }
+
+  // Approximate inverse T(Q) by numeric search (bisection) over reasonable T range
+  function T_of_Q(Qtarget) {
+    // search between -200 and 600 C
+    let lo = -200, hi = 600
+    let flo = Q_of_T(lo), fhi = Q_of_T(hi)
+    if (Qtarget <= flo) return lo
+    if (Qtarget >= fhi) return hi
+    for (let it = 0; it < 60; it++) {
+      const mid = (lo + hi) / 2
+      const fm = Q_of_T(mid)
+      if (Math.abs(fm - Qtarget) < 1e-4) return mid
+      if (fm < Qtarget) lo = mid; else hi = mid
+    }
+    return (lo + hi) / 2
+  }
+
+  // Chart drawing
+  const heatChart = document.getElementById('heatChart')
+  const heatQOut = document.getElementById('heatQ')
+  const heatTOut = document.getElementById('heatT')
+  const addHeatBtn = document.getElementById('addHeat')
+  const removeHeatBtn = document.getElementById('removeHeat')
+  const resetHeatBtn = document.getElementById('resetHeat')
+  const toggleHeatPanelBtn = document.getElementById('toggleHeatPanel')
+  const heatCtx = heatChart ? heatChart.getContext('2d') : null
+  let currentQ = 0 // kJ per mol relative to T0
+
+  function renderHeatChart() {
+    if (!heatCtx) return
+    const w = heatChart.width
+    const h = heatChart.height
+    heatCtx.clearRect(0, 0, w, h)
+    // compute sample points
+    const samples = 300
+    const Tmin = T0
+    const Tmax = 220
+    const Qvals = new Array(samples)
+    let Qmin = Infinity, Qmax = -Infinity
+    for (let i = 0; i < samples; i++) {
+      const t = Tmin + (Tmax - Tmin) * (i / (samples - 1))
+      const q = Q_of_T(t)
+      Qvals[i] = { t, q }
+      if (q < Qmin) Qmin = q
+      if (q > Qmax) Qmax = q
+    }
+    // padding
+    const pad = 36
+    // draw axes
+    heatCtx.strokeStyle = 'rgba(255,255,255,0.12)'
+    heatCtx.lineWidth = 1
+    heatCtx.beginPath()
+    heatCtx.moveTo(pad, h - pad)
+    heatCtx.lineTo(w - pad, h - pad)
+    heatCtx.moveTo(pad, h - pad)
+    heatCtx.lineTo(pad, pad)
+    heatCtx.stroke()
+
+    // scale functions: map Q to x, T to y
+    const xOfQ = q => pad + ((q - Qmin) / (Qmax - Qmin)) * (w - pad * 2)
+    const yOfT = t => h - (pad + ((t - Tmin) / (Tmax - Tmin)) * (h - pad * 2))
+
+    // plot Q(T)
+    heatCtx.beginPath()
+    heatCtx.strokeStyle = 'rgba(80,200,160,0.95)'
+    heatCtx.lineWidth = 2
+    for (let i = 0; i < Qvals.length; i++) {
+      const { t, q } = Qvals[i]
+      const x = xOfQ(q)
+      const y = yOfT(t)
+      if (i === 0) heatCtx.moveTo(x, y)
+      else heatCtx.lineTo(x, y)
+    }
+    heatCtx.stroke()
+
+    // draw gridlines and axis ticks (x: heat, y: temperature)
+    heatCtx.font = '12px system-ui'
+    heatCtx.fillStyle = 'rgba(255,255,255,0.12)'
+    heatCtx.lineWidth = 0.8
+    // y grid + ticks at 50°C steps including 0 (show negative and positive values)
+    const step = 50
+    const yMinTick = Math.floor(Tmin / step) * step
+    const yMaxTick = Math.ceil(Tmax / step) * step
+    for (let t = yMinTick; t <= yMaxTick; t += step) {
+      const norm = (t - Tmin) / (Tmax - Tmin)
+      const ty = pad + (1 - norm) * (h - pad * 2)
+      heatCtx.strokeStyle = 'rgba(255,255,255,0.03)'
+      heatCtx.beginPath()
+      heatCtx.moveTo(pad, ty)
+      heatCtx.lineTo(w - pad, ty)
+      heatCtx.stroke()
+      heatCtx.fillStyle = 'rgba(255,255,255,0.45)'
+      heatCtx.fillText(t + '°C', 6, ty + 4)
+    }
+
+    // x axis ticks
+    const xTicks = 6
+    heatCtx.fillStyle = 'rgba(255,255,255,0.6)'
+    for (let i = 0; i <= xTicks; i++) {
+      const qv = Qmin + (i / xTicks) * (Qmax - Qmin)
+      const x = xOfQ(qv)
+      heatCtx.strokeStyle = 'rgba(255,255,255,0.06)'
+      heatCtx.beginPath()
+      heatCtx.moveTo(x, h - pad)
+      heatCtx.lineTo(x, h - pad + 6)
+      heatCtx.stroke()
+      heatCtx.fillText(qv.toFixed(0), x - 10, h - 6)
+    }
+
+    // draw vertical markers and shaded area for melting and boiling plateaus
+    const qmelt = Q_of_T(T_melt)
+    const qboil = Q_of_T(T_boil)
+    const plateauHalfWidth = Math.max(6, (w - pad * 2) * 0.008)
+    heatCtx.fillStyle = 'rgba(120,180,255,0.06)'
+    heatCtx.fillRect(xOfQ(qmelt) - plateauHalfWidth, pad, plateauHalfWidth * 2, h - pad * 2)
+    heatCtx.fillStyle = 'rgba(255,220,140,0.04)'
+    heatCtx.fillRect(xOfQ(qboil) - plateauHalfWidth, pad, plateauHalfWidth * 2, h - pad * 2)
+    // labels
+    heatCtx.fillStyle = 'rgba(255,255,255,0.7)'
+    heatCtx.fillText('Melting', xOfQ(qmelt) + 8, pad + 14)
+    heatCtx.fillText('Vaporisation', xOfQ(qboil) + 8, pad + 14)
+
+    // draw currentQ marker
+    const cx = xOfQ(currentQ)
+    const cy = yOfT(T_of_Q(currentQ))
+    heatCtx.beginPath()
+    heatCtx.fillStyle = 'rgba(255,215,120,0.98)'
+    heatCtx.arc(cx, cy, 6, 0, Math.PI * 2)
+    heatCtx.fill()
+    heatCtx.strokeStyle = 'rgba(0,0,0,0.5)'
+    heatCtx.lineWidth = 1
+    heatCtx.stroke()
+
+    // axis labels
+    heatCtx.fillStyle = 'rgba(255,255,255,0.6)'
+    heatCtx.fillText('Heat added (kJ/mol)', w / 2 - 40, h - 8)
+    heatCtx.save()
+    heatCtx.translate(12, h / 2 + 20)
+    heatCtx.rotate(-Math.PI / 2)
+    heatCtx.fillText('Temperature (°C)', 0, 0)
+    heatCtx.restore()
+  }
+
+  function updateHeatUI() {
+    if (heatQOut) heatQOut.textContent = currentQ.toFixed(2)
+    if (heatTOut) heatTOut.textContent = T_of_Q(currentQ).toFixed(2)
+    // sync slider temperature to the T_of_Q value
+    const tnew = T_of_Q(currentQ)
+    // Avoid clobbering user while dragging heavily: set only if difference > 0.01
+    if (Math.abs(Number(tempRange.value) - tnew) > 0.02) setTemperature(tnew)
+    // refresh trend indicator when heat UI changes
+    updateTrendIndicator()
+  }
+
+  if (addHeatBtn) addHeatBtn.addEventListener('click', () => { currentQ += 1; renderHeatChart(); updateHeatUI() })
+  if (removeHeatBtn) removeHeatBtn.addEventListener('click', () => { currentQ = Math.max(-200, currentQ - 1); renderHeatChart(); updateHeatUI() })
+  if (resetHeatBtn) resetHeatBtn.addEventListener('click', () => { currentQ = 0; renderHeatChart(); updateHeatUI() })
+  if (toggleHeatPanelBtn) toggleHeatPanelBtn.addEventListener('click', (e) => {
+    const panel = document.querySelector('.heat-panel')
+    if (!panel) return
+    const isHidden = panel.classList.toggle('hidden')
+    toggleHeatPanelBtn.textContent = isHidden ? 'Show latent graph' : 'Hide latent graph'
+  })
+
+  // initialize chart size to device pixels for clarity
+  function fitHeatChart() {
+    if (!heatChart) return
+    const ratio = window.devicePixelRatio || 1
+    const rect = heatChart.getBoundingClientRect()
+    heatChart.width = Math.floor(rect.width * ratio)
+    heatChart.height = Math.floor(rect.height * ratio)
+    heatCtx && heatCtx.setTransform(ratio, 0, 0, ratio, 0, 0)
+    renderHeatChart()
+  }
+  window.addEventListener('resize', fitHeatChart)
+  fitHeatChart()
+
+  // Trend indicator (glowing circle) that tracks the chart trendline and phase
+  const trendEl = document.getElementById('trendIndicator')
+  function updateTrendIndicator() {
+    if (!trendEl) return
+    // Map currentQ to an x position inside simContainer
+    const rect = container.getBoundingClientRect()
+    // Use the same sample bounds used by renderHeatChart (T0..Tmax)
+    const Tmin = T0, Tmax = 220
+    const Qmin = Q_of_T(Tmin), Qmax = Q_of_T(Tmax)
+    const pct = (currentQ - Qmin) / (Qmax - Qmin)
+    const clamped = Math.max(0, Math.min(1, pct))
+    // Put the indicator horizontally across the sim area according to pct
+    const x = rect.left + clamped * (rect.width - 32) + 8
+    // Choose a vertical band near the top so it doesn't overlap the molecules much
+    const y = rect.top + 20
+    // Position (use transform for smooth motion)
+    trendEl.style.transform = `translate(${clamped * (rect.width - 32)}px, 8px)`
+
+    // Color by phase
+    const tempNow = Number(tempRange.value)
+    trendEl.classList.remove('glow-solid', 'glow-liquid', 'glow-gas')
+    if (tempNow <= SOLID_THRESHOLD) trendEl.classList.add('glow-solid')
+    else if (tempNow >= T_boil) trendEl.classList.add('glow-gas')
+    else trendEl.classList.add('glow-liquid')
+  }
+
+
+
   // Main loop
   let last = performance.now()
   function frame(now) {
@@ -588,6 +843,8 @@
     drawIMFLines()
     for (const m of molecules) drawMolecule(m)
     // (KE mini chart removed)
+    // keep trend indicator aligned during animation
+    updateTrendIndicator()
     requestAnimationFrame(frame)
   }
   requestAnimationFrame(frame)

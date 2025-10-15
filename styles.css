@@ -101,6 +101,10 @@ body {
 .toggle-bonds { margin-left: 8px; display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 .toggle-bonds input { accent-color: #5aa6ff; }
 
+.latent-toggle { display:inline-flex; align-items:center; margin-left: 12px; }
+.latent-toggle button { background: #242a44; color: var(--text); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.latent-toggle button:hover { background: #2a3152 }
+
 .legend {
   display: flex;
   gap: 18px;
@@ -118,12 +122,21 @@ body {
 .ball-o { background: #d84d4d; border: 1px solid rgba(0,0,0,0.2); }
 .ball-h { background: #f2f2f2; border: 1px solid rgba(0,0,0,0.2); }
 
-.sim-wrap { padding: 20px; }
+.sim-wrap {
+  padding: 20px;
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  justify-content: center;
+  flex-wrap: wrap; /* allow stacking on small screens */
+}
 .sim-container {
   position: relative;
-  width: min(960px, 95vw);
+  order: 0;
+  flex: 1 1 560px; /* narrower to give more horizontal width to the heat panel */
+  min-width: 360px;
+  max-width: 960px;
   aspect-ratio: 16/9;
-  margin: 0 auto;
   border-radius: 12px;
   overflow: hidden;
   background: #0c1020;
@@ -146,8 +159,9 @@ body {
 .app-footer { padding: 14px 20px 28px; color: var(--muted); }
 
 .metrics {
-  margin: 10px auto 0;
-  width: min(960px, 95vw);
+  order: 2; /* place metrics below the sim + heat panel row */
+  margin: 10px 0 0;
+  width: 100%;
   color: var(--muted);
   font-size: 0.95rem;
   display: flex;
@@ -173,3 +187,53 @@ body {
 }
 
 /* (KE mini chart removed) */
+
+/* Heat vs Temperature panel */
+.heat-panel {
+  order: 1;
+  margin: 0 0 0 0;
+  flex: 0 0 360px; /* fixed side-panel width */
+  max-width: 420px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border: 1px solid rgba(255,255,255,0.04);
+  padding: 14px;
+  border-radius: 10px;
+}
+
+
+@media (max-width: 920px) {
+  .sim-wrap { flex-direction: column; }
+  /* reorder so the sim stays on top, metrics next, heat panel below */
+  .sim-container { order: 1; }
+  .metrics { order: 2; }
+  .heat-panel { order: 3; flex: 1 1 auto; min-width: 0; max-width: 100%; }
+  #heatChart { height: 300px; }
+}
+.heat-panel h2 { margin: 0 0 8px; font-size: 1.05rem; }
+.heat-controls { display:flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
+.heat-readouts label { color: var(--muted); display:inline-block; margin-right: 12px; }
+.heat-readouts output { display:inline-block; min-width: 56px; text-align: right; margin-left: 6px; background: rgba(255,255,255,0.04); padding: 2px 8px; border-radius: 6px; }
+.heat-buttons { display:flex; gap:8px; }
+.heat-buttons button { background: #2b334f; color: var(--text); border: 1px solid rgba(255,255,255,0.06); padding: 6px 10px; border-radius:8px; cursor:pointer; }
+.heat-buttons #toggleHeatPanel { background: #33394f; }
+.heat-buttons button:hover { background:#323a5d }
+.chart-wrap { display:flex; justify-content:center; align-items:center; }
+#heatChart { width:100%; max-width:640px; height:360px; background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent); border-radius:6px; border:1px solid rgba(255,255,255,0.03); }
+.hint { color:var(--muted); font-size:0.9rem; margin-top:8px; }
+
+/* Trend indicator (glowing circle that tracks chart trendline) */
+.trend-indicator {
+  position: absolute;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  pointer-events: none;
+  right: 12px; top: 12px;
+  box-shadow: 0 0 18px 6px rgba(255,255,255,0.06);
+  transition: transform 0.08s linear, box-shadow 0.12s linear, background-color 0.12s linear;
+}
+.trend-indicator.glow-solid { background: rgba(140,200,255,0.95); box-shadow: 0 0 20px 8px rgba(140,200,255,0.28); }
+.trend-indicator.glow-liquid { background: rgba(120,240,160,0.95); box-shadow: 0 0 20px 8px rgba(120,240,160,0.25); }
+.trend-indicator.glow-gas { background: rgba(255,180,90,0.95); box-shadow: 0 0 20px 8px rgba(255,180,90,0.22); }
+
+/* hidden state for heat-panel */
+.heat-panel.hidden { display: none; }

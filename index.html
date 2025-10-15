@@ -28,7 +28,7 @@
         <button id="meltBtn" type="button">Melt 💧</button>
         <button id="boilBtn" type="button">Boil ♨️</button>
         <button id="condenseBtn" type="button">Condense ☁️</button>
-        <label class="toggle-bonds"><input id="toggleBonds" type="checkbox" checked /> Show bonds</label>
+        <button id="toggleHeatPanel" type="button">Show latent graph</button>
       </div>
     </section>
 
@@ -46,17 +46,39 @@
         </svg>
         Intermolecular attraction
       </span>
+      <label class="toggle-bonds"><input id="toggleBonds" type="checkbox" checked /> Show bonds</label>
     </section>
 
     <main class="sim-wrap">
       <div class="sim-container" id="simContainer">
         <canvas id="simCanvas" width="960" height="560"></canvas>
         <svg id="imfOverlay" class="overlay" width="960" height="560" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div id="trendIndicator" class="trend-indicator" aria-hidden="true"></div>
         <div id="phaseLabel" class="phase-overlay" hidden></div>
       </div>
       <section class="metrics" aria-live="polite">
-        Avg bond duration: <output id="avgBondDuration">–</output> s • Active bonds: <output id="activeBonds">0</output>
+        Avg bond duration: <output id="avgBondDuration"></output> s  Active bonds: <output id="activeBonds">0</output>
       </section>
+
+      <!-- Heat vs Temperature chart for latent heat demonstration -->
+      <aside class="heat-panel">
+        <h2>Heat added vs Temperature</h2>
+        <div class="heat-controls">
+          <div class="heat-readouts">
+            <label>Heat added: <output id="heatQ">0</output> kJ</label>
+            <label>Temperature: <output id="heatT">25.0</output> 6C</label>
+          </div>
+          <div class="heat-buttons">
+            <button id="addHeat">Add 1 kJ</button>
+            <button id="removeHeat">Remove 1 kJ</button>
+            <button id="resetHeat">Reset</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="heatChart" width="480" height="220" aria-label="Heat vs Temperature chart"></canvas>
+        </div>
+        <p class="hint">Drag the temperature slider or use the buttons to add/remove heat and observe latent heat plateaus at melting and boiling.</p>
+      </aside>
     </main>
 
     <footer class="app-footer">
