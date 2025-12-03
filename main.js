@@ -714,13 +714,15 @@
   const T_boil_base = 100
 
   function getMeltingPoint() {
-    // With salt, lower freezing point slightly
-    return saltOn ? -5 : T_melt_base
+    // With salt, lower freezing point noticeably to illustrate freezing point depression
+    // (cartooned value: -10 °C instead of 0 °C).
+    return saltOn ? -10 : T_melt_base
   }
 
   function getBoilingPoint() {
-    // With salt, raise boiling point slightly
-    return saltOn ? 104 : T_boil_base
+    // With salt, raise boiling point slightly; keep the shift small so the plateau
+    // remains near ~100 °C but clearly moves when salt is toggled.
+    return saltOn ? 103 : T_boil_base
   }
 
   // Compute Q(T): heat added (kJ per mol) to take 1 mol from a reference base (e.g., -50 C) up to T
@@ -786,8 +788,17 @@
 
   function renderHeatChart() {
     if (!heatCtx) return
-    const w = heatChart.width
-    const h = heatChart.height
+    // Always match canvas drawing buffer to current CSS size so the
+    // chart fully fits the visible container and stays sharp.
+    const ratio = window.devicePixelRatio || 1
+    const rect = heatChart.getBoundingClientRect()
+    const w = Math.max(10, Math.floor(rect.width * ratio))
+    const h = Math.max(10, Math.floor(rect.height * ratio))
+    if (heatChart.width !== w || heatChart.height !== h) {
+      heatChart.width = w
+      heatChart.height = h
+      heatCtx.setTransform(ratio, 0, 0, ratio, 0, 0)
+    }
     heatCtx.clearRect(0, 0, w, h)
     // compute sample points
     const samples = 300
@@ -949,18 +960,9 @@
     toggleHeatPanelBtn.textContent = isHidden ? 'Show latent graph' : 'Hide latent graph'
   })
 
-  // initialize chart size to device pixels for clarity
-  function fitHeatChart() {
-    if (!heatChart) return
-    const ratio = window.devicePixelRatio || 1
-    const rect = heatChart.getBoundingClientRect()
-    heatChart.width = Math.floor(rect.width * ratio)
-    heatChart.height = Math.floor(rect.height * ratio)
-    heatCtx && heatCtx.setTransform(ratio, 0, 0, ratio, 0, 0)
-    renderHeatChart()
-  }
-  window.addEventListener('resize', fitHeatChart)
-  fitHeatChart()
+  // initialize chart drawing; resize is handled inside renderHeatChart
+  window.addEventListener('resize', renderHeatChart)
+  renderHeatChart()
 
   // Trend indicator (glowing circle) that tracks the chart trendline and phase
   const trendEl = document.getElementById('trendIndicator')
