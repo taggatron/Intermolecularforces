@@ -134,6 +134,8 @@
 
   // Molecule container
   const molecules = []
+  // Salt ions (Na⁺ and Cl⁻), spawned when salt is added
+  const ions = [] // { x, y, vx, vy, charge: '+" or '-', type: 'Na'|'Cl' }
   // Bond tracking: map of key "i-j" to {start: seconds}
   const bonds = new Map()
   // Rolling average of bond durations (seconds)
@@ -158,6 +160,29 @@
   function initMolecules() {
     molecules.length = 0
     for (let i = 0; i < NUM_MOLECULES; i++) molecules.push(createMolecule())
+    ions.length = 0
+  }
+
+  function createIon(type) {
+    // Place ions near a random water molecule so they sit between molecules,
+    // not far away in empty space.
+    const base = molecules.length
+      ? molecules[Math.floor(Math.random() * molecules.length)]
+      : { x: W * 0.5, y: H * 0.5 }
+    const offsetR = 20 + Math.random() * 18
+    const offsetA = Math.random() * Math.PI * 2
+    const x = base.x + Math.cos(offsetA) * offsetR
+    const y = base.y + Math.sin(offsetA) * offsetR
+    const angle = rand(0, Math.PI * 2)
+    const speed = rand(0.2, 0.6)
+    return {
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      charge: type === 'Na' ? '+' : '-',
+      type
+    }
   }
 
   // Drawing utilities
@@ -193,6 +218,24 @@
     ctx.fillStyle = '#f2f2f2'
     ctx.beginPath(); ctx.arc(h1x, h1y, H_RADIUS, 0, Math.PI * 2); ctx.fill()
     ctx.beginPath(); ctx.arc(h2x, h2y, H_RADIUS, 0, Math.PI * 2); ctx.fill()
+  }
+
+  function drawIon(ion) {
+    const radius = ion.type === 'Na' ? 7 : 8
+    ctx.beginPath()
+    ctx.arc(ion.x, ion.y, radius, 0, Math.PI * 2)
+    if (ion.type === 'Na') {
+      ctx.fillStyle = '#ffdd88' // warm yellow for Na⁺
+    } else {
+      ctx.fillStyle = '#88b8ff' // cool blue for Cl⁻
+    }
+    ctx.fill()
+    // charge symbol
+    ctx.fillStyle = '#101520'
+    ctx.font = '10px system-ui'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(ion.charge, ion.x, ion.y)
   }
 
   function clear() {
@@ -251,6 +294,45 @@
       }
     }
 
+    // Simple Brownian-like motion for ions (only when salt is present)
+    if (saltOn && ions.length) {
+      for (const ion of ions) {
+        ion.x += ion.vx * BASE_SPEED * 0.6 * dt
+        ion.y += ion.vy * BASE_SPEED * 0.6 * dt
+        // gentle random jitter
+        ion.vx += (Math.random() - 0.5) * 0.4 * dt
+        ion.vy += (Math.random() - 0.5) * 0.4 * dt
+
+        // weak attraction toward nearest water molecule so ions stay
+        // interspersed within the liquid rather than drifting away.
+        if (molecules.length) {
+          let nearest = null
+          let bestD2 = Infinity
+          for (let i = 0; i < molecules.length; i++) {
+            const m = molecules[i]
+            const dx = m.x - ion.x
+            const dy = m.y - ion.y
+            const d2 = dx * dx + dy * dy
+            if (d2 < bestD2) { bestD2 = d2; nearest = m }
+          }
+          if (nearest && bestD2 > 1) {
+            const d = Math.sqrt(bestD2)
+            const nx = (nearest.x - ion.x) / d
+            const ny = (nearest.y - ion.y) / d
+            const pull = 12 * dt // very gentle pull
+            ion.vx += nx * pull
+            ion.vy += ny * pull
+          }
+        }
+        // keep within bounds
+        const r = ion.type === 'Na' ? 7 : 8
+        if (ion.x < r) { ion.x = r; ion.vx = Math.abs(ion.vx) }
+        if (ion.x > W - r) { ion.x = W - r; ion.vx = -Math.abs(ion.vx) }
+        if (ion.y < r) { ion.y = r; ion.vy = Math.abs(ion.vy) }
+        if (ion.y > H - r) { ion.y = H - r; ion.vy = -Math.abs(ion.vy) }
+      }
+    }
+
     // Interactions: repulsion (short-range) + attraction (mid-range), both temp-scaled
     const Tk = Math.max(0, cToK(tempC))
     const coolFactor = 1 - Math.min(1, Tk / 600) // stronger attraction when cooler; fades as temp rises
@@ -275,7 +357,9 @@
         // Mid-range attraction within IMF cutoff, scaled by coolness
         const inBond = d < IMF_CUTOFF
         if (inBond) {
-          const strength = IMF_ATTRACT_STRENGTH * coolFactor * (1 - d / IMF_CUTOFF)
+          // With salt present, reduce attraction to show disrupted IMFs
+          const saltFactor = saltOn ? 0.6 : 1
+          const strength = IMF_ATTRACT_STRENGTH * saltFactor * coolFactor * (1 - d / IMF_CUTOFF)
           // convert to velocity-like change per frame using dt and base scale
           const dv = strength * dt * 60 // approximate to frame-rate for feel
           a.vx += nx * dv; a.vy += ny * dv
@@ -410,9 +494,9 @@
           line.setAttribute('x2', b.x.toFixed(1))
           line.setAttribute('y2', b.y.toFixed(1))
           line.setAttribute('stroke', '#1db954')
-          line.setAttribute('stroke-width', '2')
+          line.setAttribute('stroke-width', saltOn ? '1.4' : '2')
           line.setAttribute('stroke-dasharray', '6 6')
-          line.setAttribute('opacity', '0.9')
+          line.setAttribute('opacity', saltOn ? '0.55' : '0.9')
           svg.appendChild(line)
         }
       }
@@ -507,6 +591,14 @@
       saltBtn.textContent = saltOn ? 'Remove salt 🧂' : 'Add salt 🧂'
       // Slight sparkle so the user sees a change
       sparkle(rand(20, W - 20), rand(20, H - 20))
+      // Spawn or clear ions
+      ions.length = 0
+      if (saltOn) {
+        const ionCount = Math.floor(NUM_MOLECULES * 0.35)
+        for (let i = 0; i < ionCount; i++) {
+          ions.push(createIon(i % 2 === 0 ? 'Na' : 'Cl'))
+        }
+      }
       // Recompute phase text for current temperature
       setTemperature(Number(tempRange.value))
       // Re-render latent heat chart to shift plateaus
@@ -909,6 +1001,9 @@
     update(dt, tempC)
     drawIMFLines()
     for (const m of molecules) drawMolecule(m)
+    if (saltOn) {
+      for (const ion of ions) drawIon(ion)
+    }
     // (KE mini chart removed)
     // keep trend indicator aligned during animation
     updateTrendIndicator()
