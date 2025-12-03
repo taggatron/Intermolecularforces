@@ -138,6 +138,8 @@
   const ions = [] // { x, y, vx, vy, charge: '+" or '-', type: 'Na'|'Cl' }
   // Bond tracking: map of key "i-j" to {start: seconds}
   const bonds = new Map()
+  // Bonds that are currently being disrupted by nearby salt ions
+  const disruptedBonds = new Set()
   // Rolling average of bond durations (seconds)
   let bondDurations = []
   const MAX_BOND_SAMPLES = 1000
@@ -370,6 +372,23 @@
           if (!bonds.has(key)) {
             bonds.set(key, { start: performance.now() / 1000 })
           }
+          // Mark bond as disrupted if a nearby ion is present
+          if (saltOn && ions.length) {
+            const cutoffIon = IMF_CUTOFF * 0.8
+            const cutoffIon2 = cutoffIon * cutoffIon
+            for (let k = 0; k < ions.length; k++) {
+              const ion = ions[k]
+              const mx = (a.x + b.x) * 0.5
+              const my = (a.y + b.y) * 0.5
+              const idx = ion.x - mx
+              const idy = ion.y - my
+              const id2 = idx * idx + idy * idy
+              if (id2 < cutoffIon2) {
+                disruptedBonds.add(key)
+                break
+              }
+            }
+          }
         } else {
           // If a bond existed and just broke, record duration
           const key = `${i}-${j}`
@@ -378,6 +397,7 @@
             const now = performance.now() / 1000
             const dur = Math.max(0, now - info.start)
             bonds.delete(key)
+            disruptedBonds.delete(key)
             bondDurations.push(dur)
             if (bondDurations.length > MAX_BOND_SAMPLES) bondDurations.shift()
           }
@@ -482,12 +502,14 @@
 
   function drawIMFLines() {
     // Draw green dotted lines between molecules within cutoff distance
+    const flash = 0.6 + 0.4 * Math.abs(Math.sin(simTime * 4)) // 4 Hz flash
     for (let i = 0; i < molecules.length; i++) {
       for (let j = i + 1; j < molecules.length; j++) {
         const a = molecules[i], b = molecules[j]
         const dx = b.x - a.x, dy = b.y - a.y
         const d2 = dx * dx + dy * dy
         if (d2 <= IMF_CUTOFF * IMF_CUTOFF) {
+          const key = `${i}-${j}`
           const line = document.createElementNS('http://www.w3.org/2000/svg', 'line')
           line.setAttribute('x1', a.x.toFixed(1))
           line.setAttribute('y1', a.y.toFixed(1))
@@ -498,6 +520,21 @@
           line.setAttribute('stroke-dasharray', '6 6')
           line.setAttribute('opacity', saltOn ? '0.55' : '0.9')
           svg.appendChild(line)
+
+          // If this bond is disrupted by a nearby ion, draw a flashing
+          // orange overlay on top to show disruption.
+          if (saltOn && disruptedBonds.has(key)) {
+            const flare = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+            flare.setAttribute('x1', a.x.toFixed(1))
+            flare.setAttribute('y1', a.y.toFixed(1))
+            flare.setAttribute('x2', b.x.toFixed(1))
+            flare.setAttribute('y2', b.y.toFixed(1))
+            flare.setAttribute('stroke', 'rgba(255, 180, 60, 1)')
+            flare.setAttribute('stroke-width', '2.4')
+            flare.setAttribute('stroke-dasharray', '3 4')
+            flare.setAttribute('opacity', (0.25 + 0.5 * flash).toFixed(2))
+            svg.appendChild(flare)
+          }
         }
       }
     }
@@ -802,9 +839,9 @@
     heatCtx.clearRect(0, 0, w, h)
     // compute sample points
     const samples = 300
-    const Tmin = T0
-    // extend chart a bit above boiling so raised boiling point still fits comfortably
-    const Tmax = 220
+    // Fix displayed temperature range on the y-axis
+    const Tmin = -50
+    const Tmax = 150
     const Qvals = new Array(samples)
     let Qmin = Infinity, Qmax = -Infinity
     for (let i = 0; i < samples; i++) {
@@ -847,10 +884,10 @@
     heatCtx.font = '12px system-ui'
     heatCtx.fillStyle = 'rgba(255,255,255,0.12)'
     heatCtx.lineWidth = 0.8
-    // y grid + ticks at 50°C steps including 0 (show negative and positive values)
+    // y grid + ticks at 50°C steps from -50°C to 150°C
     const step = 50
-    const yMinTick = Math.floor(Tmin / step) * step
-    const yMaxTick = Math.ceil(Tmax / step) * step
+    const yMinTick = -50
+    const yMaxTick = 150
     for (let t = yMinTick; t <= yMaxTick; t += step) {
       const norm = (t - Tmin) / (Tmax - Tmin)
       const ty = pad + (1 - norm) * (h - pad * 2)
