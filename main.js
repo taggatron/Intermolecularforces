@@ -820,8 +820,34 @@
   const removeHeatBtn = document.getElementById('removeHeat')
   const resetHeatBtn = document.getElementById('resetHeat')
   const toggleHeatPanelBtn = document.getElementById('toggleHeatPanel')
+  // Y-axis shift UI elements
+  const yAxisShiftInput = document.getElementById('yAxisShift')
+  const yAxisShiftApplyBtn = document.getElementById('yAxisShiftApply')
+  const yAxisShiftResetBtn = document.getElementById('yAxisShiftReset')
   const heatCtx = heatChart ? heatChart.getContext('2d') : null
   let currentQ = 0 // kJ per mol relative to T0
+  // Chart Y-axis translation in degrees Celsius (positive shifts up visually)
+  let chartYOffsetC = 0
+
+  // Public helper to set y-axis offset
+  function setChartYOffsetC(deltaC) {
+    chartYOffsetC = Number(deltaC) || 0
+    renderHeatChart()
+    updateHeatUI()
+  }
+
+  // Determine dynamic chart temperature bounds so the full latent curve fits
+  function getChartTempBounds() {
+    const Tm = getMeltingPoint()
+    const Tb = getBoilingPoint()
+    // Ensure room below melting and well above boiling to show slopes clearly
+    const baseTmin = Math.min(-100, Tm - 50)
+    const baseTmax = Math.max(200, Tb + 80)
+    // Apply translation uniformly so the whole axis shifts
+    const Tmin = baseTmin + chartYOffsetC
+    const Tmax = baseTmax + chartYOffsetC
+    return { Tmin, Tmax }
+  }
 
   function renderHeatChart() {
     if (!heatCtx) return
@@ -839,9 +865,8 @@
     heatCtx.clearRect(0, 0, w, h)
     // compute sample points
     const samples = 300
-    // Expanded displayed temperature range on the y-axis to fit more data
-    const Tmin = -100
-    const Tmax = 200
+    // Dynamic displayed temperature range on the y-axis to fit the full latent curve
+    const { Tmin, Tmax } = getChartTempBounds()
     const Qvals = new Array(samples)
     let Qmin = Infinity, Qmax = -Infinity
     for (let i = 0; i < samples; i++) {
@@ -884,10 +909,10 @@
     heatCtx.font = '12px system-ui'
     heatCtx.fillStyle = 'rgba(255,255,255,0.12)'
     heatCtx.lineWidth = 0.8
-    // y grid + ticks at 50°C steps from -50°C to 150°C
+    // y grid + ticks at 50°C steps spanning current bounds
     const step = 50
-    const yMinTick = -50
-    const yMaxTick = 150
+    const yMinTick = Math.ceil(Tmin / step) * step
+    const yMaxTick = Math.floor(Tmax / step) * step
     for (let t = yMinTick; t <= yMaxTick; t += step) {
       const norm = (t - Tmin) / (Tmax - Tmin)
       const ty = pad + (1 - norm) * (h - pad * 2)
@@ -996,6 +1021,20 @@
     const isHidden = panel.classList.toggle('hidden')
     toggleHeatPanelBtn.textContent = isHidden ? 'Show latent graph' : 'Hide latent graph'
   })
+
+  // Wire Y-axis shift controls
+  if (yAxisShiftApplyBtn && yAxisShiftInput) {
+    yAxisShiftApplyBtn.addEventListener('click', () => {
+      const val = Number(yAxisShiftInput.value)
+      setChartYOffsetC(val)
+    })
+  }
+  if (yAxisShiftResetBtn && yAxisShiftInput) {
+    yAxisShiftResetBtn.addEventListener('click', () => {
+      yAxisShiftInput.value = '0'
+      setChartYOffsetC(0)
+    })
+  }
 
   // initialize chart drawing; resize is handled inside renderHeatChart
   window.addEventListener('resize', renderHeatChart)
