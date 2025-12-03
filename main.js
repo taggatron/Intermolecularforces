@@ -21,6 +21,7 @@
   const meltBtn = document.getElementById('meltBtn')
   const boilBtn = document.getElementById('boilBtn')
   const condenseBtn = document.getElementById('condenseBtn')
+  const saltBtn = document.getElementById('saltBtn')
   const toggleBondsEl = document.getElementById('toggleBonds')
   const avgBondDurationEl = document.getElementById('avgBondDuration')
   const activeBondsEl = document.getElementById('activeBonds')
@@ -58,6 +59,10 @@
   const LATTICE_SPRING = 0.8 // spring strength toward anchor when solid
   const LATTICE_DAMP = 0.85
   const SOLID_THRESHOLD = 0 // deg C
+
+  // Salt state (simplified: on/off). In reality, dissolved salt lowers freezing point
+  // and raises boiling point; we model that qualitatively.
+  let saltOn = false
 
   // Freeze sequence state
   let freezeTimerMs = 0 // counts down when freezing from gas
@@ -118,10 +123,13 @@
   }
 
   // Phase estimation (1 atm):
+  // If salt is present, approximate freezing point depression and boiling point elevation.
   function getPhase(c) {
-    if (c <= 0) return 'Solid (Ice)'
-    if (c >= 100) return 'Gas (Steam)'
-    return 'Liquid (Water)'
+    const freezePoint = saltOn ? -5 : 0
+    const boilPoint = saltOn ? 104 : 100
+    if (c <= freezePoint) return saltOn ? 'Solid (Ice + salt)' : 'Solid (Ice)'
+    if (c >= boilPoint) return saltOn ? 'Gas (Steam, salty solution)' : 'Gas (Steam)'
+    return saltOn ? 'Liquid (Salt solution)' : 'Liquid (Water)'
   }
 
   // Molecule container
@@ -491,6 +499,22 @@
   boilBtn.addEventListener('click', () => tweenTemperature(110))
   condenseBtn.addEventListener('click', () => tweenTemperature(80))
 
+  // Salt button: toggle dissolved salt state
+  if (saltBtn) {
+    saltBtn.addEventListener('click', () => {
+      saltOn = !saltOn
+      // Update button label to show state
+      saltBtn.textContent = saltOn ? 'Remove salt 🧂' : 'Add salt 🧂'
+      // Slight sparkle so the user sees a change
+      sparkle(rand(20, W - 20), rand(20, H - 20))
+      // Recompute phase text for current temperature
+      setTemperature(Number(tempRange.value))
+      // Re-render latent heat chart to shift plateaus
+      renderHeatChart()
+      updateHeatUI()
+    })
+  }
+
   // Optional little sparkle effect on big phase transitions
   function sparkle(x, y) {
     const s = document.createElement('div')
@@ -593,9 +617,19 @@
   const LATENT_FUSION = 6.01 // kJ/mol
   const LATENT_VAP = 40.65 // kJ/mol
 
-  // Temperature breakpoints (deg C)
-  const T_melt = 0
-  const T_boil = 100
+  // Base temperature breakpoints (deg C) without salt
+  const T_melt_base = 0
+  const T_boil_base = 100
+
+  function getMeltingPoint() {
+    // With salt, lower freezing point slightly
+    return saltOn ? -5 : T_melt_base
+  }
+
+  function getBoilingPoint() {
+    // With salt, raise boiling point slightly
+    return saltOn ? 104 : T_boil_base
+  }
 
   // Compute Q(T): heat added (kJ per mol) to take 1 mol from a reference base (e.g., -50 C) up to T
   // We'll choose reference T0 = -50 C where Q=0 for plotting convenience
@@ -607,7 +641,10 @@
     // helper to accumulate from low to high
     const low = Math.min(T0, T)
     const high = Math.max(T0, T)
-    // We'll step through intervals: [-50..0] solid, [0..100] liquid (with plateau for fusion), [100..T] gas
+    const T_melt = getMeltingPoint()
+    const T_boil = getBoilingPoint()
+
+    // We'll step through intervals: [T0..T_melt] solid, [T_melt..T_boil] liquid (with plateau for fusion), [T_boil..T] gas
     if (T >= T0 && T <= T_melt) {
       // entirely in solid
       return Cs * (T - T0)
@@ -663,6 +700,7 @@
     // compute sample points
     const samples = 300
     const Tmin = T0
+    // extend chart a bit above boiling so raised boiling point still fits comfortably
     const Tmax = 220
     const Qvals = new Array(samples)
     let Qmin = Infinity, Qmax = -Infinity
@@ -737,6 +775,8 @@
     }
 
     // draw vertical markers and shaded area for melting and boiling plateaus
+    const T_melt = getMeltingPoint()
+    const T_boil = getBoilingPoint()
     const qmelt = Q_of_T(T_melt)
     const qboil = Q_of_T(T_boil)
     const plateauHalfWidth = Math.max(6, (w - pad * 2) * 0.008)
@@ -749,13 +789,39 @@
     heatCtx.fillText('Melting', xOfQ(qmelt) + 8, pad + 14)
     heatCtx.fillText('Vaporisation', xOfQ(qboil) + 8, pad + 14)
 
-    // draw currentQ marker
+    // draw currentQ marker (use the same accent as the temperature gauge)
     const cx = xOfQ(currentQ)
     const cy = yOfT(T_of_Q(currentQ))
+    // prefer the glow color returned by tempToColor so the marker matches the slider/theme
+    const _tempAccent = typeof tempRange !== 'undefined' ? tempToColor(Number(tempRange.value)) : null
+    // derive a brighter but less opaque fill and a larger shadow (glow)
+    let markerColor = 'rgba(255,215,120,0.75)'
+    let markerShadowColor = markerColor
+    if (_tempAccent && _tempAccent.glow) {
+      const m = String(_tempAccent.glow).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([0-9.]+))?\)/)
+      if (m) {
+        let r = parseInt(m[1], 10), g = parseInt(m[2], 10), b = parseInt(m[3], 10), a = parseFloat(m[4] || '1')
+        // brighten color toward white
+        const brighten = (v) => Math.min(255, Math.round(v + (255 - v) * 0.25))
+        r = brighten(r); g = brighten(g); b = brighten(b)
+        const reducedAlpha = Math.max(0.35, Math.min(0.85, a * 0.8)) // reduce opacity a bit
+        markerColor = `rgba(${r}, ${g}, ${b}, ${reducedAlpha})`
+        // shadow a touch dimmer than fill for glow
+        markerShadowColor = `rgba(${r}, ${g}, ${b}, ${Math.max(0.25, reducedAlpha * 0.8)})`
+      } else {
+        markerColor = _tempAccent.glow
+        markerShadowColor = _tempAccent.glow
+      }
+    }
+    // draw with a larger blur to simulate a wider glow radius
+    heatCtx.save()
     heatCtx.beginPath()
-    heatCtx.fillStyle = 'rgba(255,215,120,0.98)'
-    heatCtx.arc(cx, cy, 6, 0, Math.PI * 2)
+    heatCtx.fillStyle = markerColor
+    heatCtx.shadowColor = markerShadowColor
+    heatCtx.shadowBlur = 24 // slightly larger glow radius
+    heatCtx.arc(cx, cy, 7, 0, Math.PI * 2) // slightly bigger marker
     heatCtx.fill()
+    heatCtx.restore()
     heatCtx.strokeStyle = 'rgba(0,0,0,0.5)'
     heatCtx.lineWidth = 1
     heatCtx.stroke()
@@ -824,6 +890,7 @@
 
     // Color by phase
     const tempNow = Number(tempRange.value)
+    const T_boil = getBoilingPoint()
     trendEl.classList.remove('glow-solid', 'glow-liquid', 'glow-gas')
     if (tempNow <= SOLID_THRESHOLD) trendEl.classList.add('glow-solid')
     else if (tempNow >= T_boil) trendEl.classList.add('glow-gas')

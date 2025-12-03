@@ -192,8 +192,8 @@ body {
 .heat-panel {
   order: 1;
   margin: 0 0 0 0;
-  flex: 0 0 360px; /* fixed side-panel width */
-  max-width: 420px;
+  flex: 0 0 520px; /* fixed side-panel width */
+  max-width: 520px;
   background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
   border: 1px solid rgba(255,255,255,0.04);
   padding: 14px;
