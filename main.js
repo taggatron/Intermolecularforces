@@ -839,9 +839,9 @@
     heatCtx.clearRect(0, 0, w, h)
     // compute sample points
     const samples = 300
-    // Fix displayed temperature range on the y-axis
-    const Tmin = -50
-    const Tmax = 150
+    // Expanded displayed temperature range on the y-axis to fit more data
+    const Tmin = -100
+    const Tmax = 200
     const Qvals = new Array(samples)
     let Qmin = Infinity, Qmax = -Infinity
     for (let i = 0; i < samples; i++) {
